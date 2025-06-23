@@ -1,86 +1,76 @@
 const express = require('express');
-const fs = require('fs');
 const cors = require('cors');
 const mongoose = require('mongoose')
-require('dontenv').config()
+require('dotenv').config()
 
 const app = express();
-
-app.use(cors())
 app.use(express.json())
 
+
+// this enables CORS for all origins, so any frontend can make requests to your API, Replace '*' with your own origin if needed.
+app.use(cors({
+    origin: '*'
+}))
+
+
+//      Create a .env file in your root directory and paste this inside it:
+//      MONGO_URI="PASTE YOUR URI HERE"
 const mongo_uri = process.env.MONGO_URI;
 
-mongoose.connect(mongo_uri, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true
-}).then(() => console.log('DB Connected'))
+
+mongoose.connect(mongo_uri)
+    .then(() => console.log('DB Connected'))
     .catch((err) => console.error(`DB Connection error: ${err}`))
 
 const noteSchema = new mongoose.Schema({
-    id: {
-        title: String,
-        content: String
-    }
+    note_id: String,
+    title: String,
+    content: String
 })
 
 const Note = mongoose.model('Note', noteSchema);
 
-fs.readFile("notes.json", 'utf-8', (err, data) => {
-    if (err) {
-        console.error(err)
-    }
-    notes = JSON.parse(data)
-})
-
-let notesContent = JSON.stringify(notes, null, 2)
 
 app.get('/', async (req, res) => {
     const notes = await Note.find();
     res.json(notes)
 })
 
-app.post('/', (req, res) => {
+app.post('/', async (req, res) => {
     console.log(req.body)
-    const { id, title, content } = req.body;
+    const { note_id, title, content } = req.body;
 
     if (!id || !title || !content) {
         return res.status(400).json({ error: 'Missing id, title, content' })
     }
+    const newNote = new Note({ note_id, title, content })
 
-    notes[id] = { title, content };
-    saveFile();
+    await newNote.save();
 })
 
-app.put('/:id', (req, res) => {
-    const id = req.params.id;
+app.put('/:note_id', async (req, res) => {
+    const note_id = req.params.id;
     const { title, content } = req.body;
 
-    if (!notes[id]) {
+    const note = await Note.findOne({ note_id })
+
+    if (!note) {
         return res.status(400).json({ error: 'Note not found' })
     }
 
-    notes[id] = { title, content }
-    saveFile();
+    note.title = title
+    note.content = content
+    await note.save();
 })
 
-app.delete(`/:id`, (req, res) => {
+app.delete(`/:id`, async (req, res) => {
     const id = req.params.id;
-    if (!notes[id]) {
+    const result = await Note.deleteOne({ id })
+    if (result.deletedCount === 0) {
         return res.status(400).json({ error: 'Note not found' })
     }
-    delete notes[id];
-    saveFile();
+    res.json({ message: 'Note deleted' })
 })
-
-function saveFile(callback) {
-    let notesContent = JSON.stringify(notes, null, 2)
-    fs.writeFile('notes.json', notesContent, (err) => {
-        if (err) {
-            console.error(err)
-        }
-    })
-}
 
 app.listen(3000, () => {
     console.log('server started')
